@@ -19,12 +19,12 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     API_V1_PREFIX: str = "/api/v1"
 
-    # Database (MariaDB)
+    # Database (MariaDB / local development)
     DATABASE_URL: str = (
-        "mysql+aiomysql://billuser:billpass@mariadb:3306/billanalyser"
+        "mysql+aiomysql://billuser:billpass@localhost:3306/billanalyser"
     )
     DATABASE_SYNC_URL: str = (
-        "mysql+pymysql://billuser:billpass@mariadb:3306/billanalyser"
+        "mysql+pymysql://billuser:billpass@localhost:3306/billanalyser"
     )
 
     # JWT
@@ -34,14 +34,14 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # File uploads
-    UPLOAD_DIR: str = "/app/uploads"
+    UPLOAD_DIR: str = "./uploads"
     MAX_UPLOAD_SIZE_MB: int = 10
     ALLOWED_EXTENSIONS: set[str] = {"jpg", "jpeg", "png", "pdf"}
 
     # Redis / Celery
-    REDIS_URL: str = "redis://redis:6379/0"
-    CELERY_BROKER_URL: str = "redis://redis:6379/0"
-    CELERY_RESULT_BACKEND: str = "redis://redis:6379/1"
+    REDIS_URL: str = "redis://localhost:6379/0"
+    CELERY_BROKER_URL: str = "redis://localhost:6379/0"
+    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"
 
     # LLM
     LLM_PROVIDER: Literal["openai", "ollama"] = "openai"
@@ -51,12 +51,12 @@ class Settings(BaseSettings):
     OLLAMA_MODEL: str = "llama3.2"
 
     # Vector store
-    CHROMA_PERSIST_DIR: str = "/app/data/chroma"
+    CHROMA_PERSIST_DIR: str = "./data/chroma"
     EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
     DUPLICATE_SIMILARITY_THRESHOLD: float = 0.85
 
     # OCR
-    TESSERACT_CMD: str = "/usr/bin/tesseract"
+    TESSERACT_CMD: str = "tesseract"
     OCR_MIN_CONFIDENCE: float = 0.3
 
     # Rate limiting

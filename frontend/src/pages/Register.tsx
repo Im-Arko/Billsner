@@ -1,4 +1,5 @@
 import { FormEvent, useState } from "react";
+import axios from "axios";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
@@ -18,8 +19,12 @@ export default function Register() {
     try {
       await register(email, password, fullName || undefined);
       navigate("/");
-    } catch {
-      setError("Registration failed — email may already exist");
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.data?.detail) {
+        setError(String(error.response.data.detail));
+      } else {
+        setError("Registration failed — email may already exist");
+      }
     } finally {
       setLoading(false);
     }
