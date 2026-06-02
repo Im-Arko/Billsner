@@ -1,0 +1,50 @@
+# Web framework
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.17
+
+# Database
+sqlalchemy[asyncio]==2.0.36
+aiomysql==0.2.0
+alembic==1.14.0
+pymysql==1.1.1
+
+# Auth & security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.2.1
+slowapi==0.1.9
+
+# Validation & config
+pydantic==2.10.3
+pydantic-settings==2.6.1
+email-validator==2.2.0
+
+# AI / ML
+langchain==0.3.13
+langchain-openai==0.2.14
+langchain-community==0.3.13
+openai==1.57.4
+chromadb==0.5.23
+sentence-transformers==3.3.1
+
+# OCR & image processing
+pytesseract==0.3.13
+opencv-python-headless==4.10.0.84
+Pillow==11.0.0
+pdf2image==1.17.0
+pypdf==5.1.0
+
+# Background tasks
+celery[redis]==5.4.0
+redis==5.2.1
+
+# Reports
+pandas==2.2.3
+openpyxl==3.1.5
+reportlab==4.2.5
+
+# Utilities
+httpx==0.28.1
+python-dotenv==1.0.1
+aiofiles==24.1.0
