@@ -29,6 +29,9 @@ async def fetch_expenses_for_export(
     if filters.date_to:
         conditions.append(Expense.expense_date <= filters.date_to)
 
+    if filters.vendor:
+        conditions.append(Expense.vendor_name.ilike(f"%{filters.vendor}%"))
+
     result = await db.execute(
         select(Expense).where(and_(*conditions)).order_by(Expense.expense_date.desc())
     )

@@ -52,7 +52,7 @@ class ExpenseFilter(BaseModel):
     date_to: date | None = None
     is_duplicate: bool | None = None
     skip: int = Field(0, ge=0)
-    limit: int = Field(50, ge=1, le=200)
+    limit: int = Field(50, ge=1, le=10000)
 
 
 class ExpenseSearch(BaseModel):

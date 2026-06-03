@@ -50,6 +50,14 @@ npm install
 npm run dev
 ```
 
+**Backend tests**
+
+```bash
+cd backend
+pip install -r requirements.txt
+pytest
+```
+
 ## Project structure
 
 ```
@@ -78,6 +86,6 @@ billanalyser/
 | Bills | `POST /upload`, `GET /{id}`, `DELETE /{id}` |
 | Expenses | `GET /`, `POST /search`, `GET /summary`, `PATCH /{id}` |
 | AI | `POST /ocr/{bill_id}`, `/classify`, `GET /duplicates/{bill_id}` |
-| Reports | `GET /export?format=csv\|xlsx\|pdf` |
+| Reports | `GET /export?format=csv\|xlsx\|pdf&category={category}&vendor={vendor}&date_from={YYYY-MM-DD}&date_to={YYYY-MM-DD}` |
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for ER diagram, pipelines, and deployment guidance.

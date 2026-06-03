@@ -20,6 +20,7 @@ router = APIRouter(prefix="/reports", tags=["Reports"])
 async def export_report(
     format: str = Query("csv", pattern="^(csv|xlsx|pdf)$"),
     category: str | None = None,
+    vendor: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
     current_user: User = Depends(get_current_user),
@@ -29,6 +30,7 @@ async def export_report(
 
     filters = ExpenseFilter(
         category=category,
+        vendor=vendor,
         date_from=date_type.fromisoformat(date_from) if date_from else None,
         date_to=date_type.fromisoformat(date_to) if date_to else None,
         limit=10000,
