@@ -1,5 +1,6 @@
 pytest_plugins = ["pytest_asyncio"]
 
+import uuid
 import pytest_asyncio
 from httpx import AsyncClient
 from httpx import ASGITransport
@@ -48,7 +49,7 @@ async def override_db(async_engine):
 @pytest_asyncio.fixture
 async def test_user(async_session, override_db):
     user = User(
-        email="test@example.com",
+        email=f"test+{uuid.uuid4().hex}@example.com",
         hashed_password="hashed-password",
         full_name="Test User",
         is_active=True,

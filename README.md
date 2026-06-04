@@ -24,6 +24,18 @@ cp backend/.env.example backend/.env
 docker compose up --build
 ```
 
+To start only the database service:
+
+```bash
+docker compose up -d mariadb
+```
+
+To start the database and Redis without the full stack:
+
+```bash
+docker compose up -d mariadb redis
+```
+
 - Frontend: http://localhost:3000  
 - API docs: http://localhost:8000/docs  
 - Health: http://localhost:8000/health  

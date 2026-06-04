@@ -1,94 +1,98 @@
-import asyncio
+import pytest
 from datetime import date
 from decimal import Decimal
 
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
-
-from app.api.deps import get_db, get_current_user
-from app.database import Base
-from app.main import app
+from sqlalchemy import delete
 from app.models.expense import Expense
-from app.models.user import User
 
 
-async def _prepare_test_database():
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+async def _create_export_expenses(async_session, test_user):
+    expense_a = Expense(
+        user_id=test_user.id,
+        vendor_name="Acme Supplies",
+        bill_number="INV-1001",
+        total_amount=Decimal("150.00"),
+        tax_amount=Decimal("15.00"),
+        expense_date=date(2026, 6, 15),
+        currency="INR",
+        category_name="Travel",
+    )
+    expense_b = Expense(
+        user_id=test_user.id,
+        vendor_name="Other Vendor",
+        bill_number="INV-1002",
+        total_amount=Decimal("60.00"),
+        tax_amount=Decimal("6.00"),
+        expense_date=date(2026, 6, 20),
+        currency="INR",
+        category_name="Food",
+    )
+    async_session.add_all([expense_a, expense_b])
+    await async_session.commit()
+    return [expense_a, expense_b]
 
-    AsyncSessionLocal = sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
+
+async def _reset_expenses(async_session):
+    await async_session.execute(delete(Expense))
+    await async_session.commit()
+
+
+@pytest.mark.asyncio
+async def test_export_csv_vendor_filter(client, async_session, test_user):
+    await _reset_expenses(async_session)
+    await _create_export_expenses(async_session, test_user)
+
+    response = await client.get(
+        "/api/v1/reports/export",
+        params={
+            "format": "csv",
+            "vendor": "Acme",
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-30",
+        },
     )
 
-    async with AsyncSessionLocal() as session:
-        user = User(
-            email="test@example.com",
-            hashed_password="hashed-password",
-            full_name="Test User",
-            is_active=True,
-        )
-        session.add(user)
-        await session.flush()
-
-        expense_a = Expense(
-            user_id=user.id,
-            vendor_name="Acme Supplies",
-            total_amount=Decimal("150.00"),
-            tax_amount=Decimal("15.00"),
-            expense_date=date(2026, 6, 15),
-            currency="INR",
-            category_name="Travel",
-        )
-        expense_b = Expense(
-            user_id=user.id,
-            vendor_name="Other Vendor",
-            total_amount=Decimal("60.00"),
-            tax_amount=Decimal("6.00"),
-            expense_date=date(2026, 6, 20),
-            currency="INR",
-            category_name="Food",
-        )
-        session.add_all([expense_a, expense_b])
-        await session.commit()
-
-    async def _get_test_db():
-        async with AsyncSessionLocal() as session:
-            yield session
-
-    return _get_test_db, user
+    assert response.status_code == 200
+    assert response.headers["content-disposition"] == 'attachment; filename="expenses.csv"'
+    assert b"Acme Supplies" in response.content
+    assert b"Other Vendor" not in response.content
 
 
-def test_export_csv_vendor_filter():
-    get_db_override, test_user = asyncio.run(_prepare_test_database())
+@pytest.mark.asyncio
+async def test_export_xlsx_vendor_filter(client, async_session, test_user):
+    await _reset_expenses(async_session)
+    await _create_export_expenses(async_session, test_user)
 
-    async def _override_current_user():
-        return test_user
-
-    app.dependency_overrides[get_db] = get_db_override
-    app.dependency_overrides[get_current_user] = _override_current_user
-
-    transport = ASGITransport(app=app)
-
-    async def _send_request():
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            return await client.get(
-                "/api/v1/reports/export",
-                params={
-                    "format": "csv",
-                    "vendor": "Acme",
-                    "date_from": "2026-06-01",
-                    "date_to": "2026-06-30",
-                },
-            )
-
-    response = asyncio.run(_send_request())
-
-    app.dependency_overrides.pop(get_db, None)
-    app.dependency_overrides.pop(get_current_user, None)
+    response = await client.get(
+        "/api/v1/reports/export",
+        params={
+            "format": "xlsx",
+            "vendor": "Acme",
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-30",
+        },
+    )
 
     assert response.status_code == 200
-    assert "Acme Supplies" in response.text
-    assert "Other Vendor" not in response.text
-    assert response.headers["Content-Disposition"] == 'attachment; filename="expenses.csv"'
+    assert response.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    assert len(response.content) > 0
+
+
+@pytest.mark.asyncio
+async def test_export_pdf_vendor_filter(client, async_session, test_user):
+    await _reset_expenses(async_session)
+    await _create_export_expenses(async_session, test_user)
+
+    response = await client.get(
+        "/api/v1/reports/export",
+        params={
+            "format": "pdf",
+            "vendor": "Acme",
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-30",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.content.startswith(b"%PDF")
