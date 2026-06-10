@@ -18,11 +18,10 @@ COLLECTION_NAME = "expense_bills"
 
 # ── Embedding Model Factory ───────────────────────────────────────────────────
 def get_embeddings():
-    if settings.LLM_PROVIDER == "openai":
-        from langchain_openai import OpenAIEmbeddings
-        return OpenAIEmbeddings(
-            model=settings.EMBEDDING_MODEL,
-            api_key=settings.OPENAI_API_KEY,
+    if settings.LLM_PROVIDER == "groq":
+        from langchain_huggingface import HuggingFaceEmbeddings
+        return HuggingFaceEmbeddings(
+            model_name=settings.EMBEDDING_MODEL,
         )
     else:
         from langchain_ollama import OllamaEmbeddings

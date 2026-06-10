@@ -55,11 +55,11 @@ def _get_llm():
             model=settings.OLLAMA_MODEL,
             temperature=0,
         )
-    from langchain_openai import ChatOpenAI
+    from langchain_groq import ChatGroq
 
-    return ChatOpenAI(
-        api_key=settings.OPENAI_API_KEY,
-        model=settings.OPENAI_MODEL,
+    return ChatGroq(
+        api_key=settings.GROQ_API_KEY,
+        model=settings.GROQ_MODEL,
         temperature=0,
     )
 
@@ -71,7 +71,7 @@ def classify_expense(
     combined = f"{vendor_name or ''}\n{text}".strip()
     kw_cat, kw_conf = classify_by_keywords(combined)
 
-    if not settings.OPENAI_API_KEY and settings.LLM_PROVIDER == "openai":
+    if not settings.GROQ_API_KEY and settings.LLM_PROVIDER == "groq":
         return kw_cat, [], kw_conf, "keyword"
 
     prompt = ChatPromptTemplate.from_messages(

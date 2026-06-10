@@ -44,9 +44,9 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"
 
     # LLM
-    LLM_PROVIDER: Literal["openai", "ollama"] = "openai"
-    OPENAI_API_KEY: str = ""
-    OPENAI_MODEL: str = "gpt-4o-mini"
+    LLM_PROVIDER: Literal["groq", "ollama"] = "groq"
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "mixtral-8x7b-32768"
     OLLAMA_BASE_URL: str = "http://ollama:11434"
     OLLAMA_MODEL: str = "llama3.2"
 

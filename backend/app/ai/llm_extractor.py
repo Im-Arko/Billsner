@@ -64,11 +64,11 @@ def _get_llm():
             model=settings.OLLAMA_MODEL,
             temperature=0,
         )
-    from langchain_openai import ChatOpenAI
+    from langchain_groq import ChatGroq
 
-    return ChatOpenAI(
-        api_key=settings.OPENAI_API_KEY,
-        model=settings.OPENAI_MODEL,
+    return ChatGroq(
+        api_key=settings.GROQ_API_KEY,
+        model=settings.GROQ_MODEL,
         temperature=0,
     )
 
