@@ -56,7 +56,8 @@ class Settings(BaseSettings):
     DUPLICATE_SIMILARITY_THRESHOLD: float = 0.85
 
     # OCR
-    TESSERACT_CMD: str = "tesseract"
+    POPPLER_PATH: str | None = None
+    TESSERACT_CMD: str | None = None
     OCR_MIN_CONFIDENCE: float = 0.3
 
     # Rate limiting

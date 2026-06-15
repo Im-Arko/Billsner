@@ -290,7 +290,7 @@ export default function Dashboard() {
                         </span>
                       </td>
                       <td style={{ color: "rgba(232,230,224,0.4)", fontSize: "0.8rem" }}>
-                        {new Date(b.created_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
+                        {new Date(b.created_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" })}
                       </td>
                     </tr>
                   );

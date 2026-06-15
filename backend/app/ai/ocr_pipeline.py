@@ -17,8 +17,12 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+
 if settings.TESSERACT_CMD:
     pytesseract.pytesseract.tesseract_cmd = settings.TESSERACT_CMD
+
+print("POPPLER:", settings.POPPLER_PATH)
+print("TESSERACT:", settings.TESSERACT_CMD)
 
 
 @dataclass
@@ -36,7 +40,12 @@ def _load_image(path: Path) -> np.ndarray:
 
 
 def _pdf_to_images(path: Path) -> list[np.ndarray]:
-    pages = convert_from_path(str(path), dpi=200)
+    
+    pages = convert_from_path(
+        str(path),
+        dpi=200,
+        poppler_path=settings.POPPLER_PATH
+    )
     images: list[np.ndarray] = []
     for page in pages:
         arr = np.array(page.convert("RGB"))

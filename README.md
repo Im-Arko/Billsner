@@ -10,7 +10,7 @@ Production-oriented full-stack platform that uploads bills/invoices, runs OCR + 
 | Backend | FastAPI, Pydantic v2, SQLAlchemy 2 async |
 | Database | MariaDB |
 | Migrations | Alembic |
-| AI | LangChain, OpenAI/Ollama, Tesseract OCR, ChromaDB, sentence-transformers |
+| AI | LangChain, Ollama, Tesseract OCR, ChromaDB, sentence-transformers |
 | Jobs | Celery + Redis |
 | Deploy | Docker Compose |
 
@@ -19,7 +19,6 @@ Production-oriented full-stack platform that uploads bills/invoices, runs OCR + 
 ```bash
 # Copy environment
 cp backend/.env.example backend/.env
-# Set OPENAI_API_KEY in backend/.env
 
 docker compose up --build
 ```
