@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from kombu.exceptions import OperationalError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -58,9 +59,22 @@ async def upload_bills(
         db.add(bill)
         await db.flush()
         created.append(bill)
-        process_bill_task.delay(bill.id)
 
     await db.commit()
+
+    try:
+        for bill in created:
+            process_bill_task.apply_async(args=(bill.id,), retry=True)
+    except OperationalError as exc:
+        for bill in created:
+            bill.status = BillStatus.FAILED
+            bill.error_message = f"Could not queue bill for processing: {exc}"
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Bill uploaded, but Redis/Celery is unavailable. Start Redis and retry.",
+        ) from exc
+
     return BillUploadResponse(
         bills=[BillResponse.model_validate(b) for b in created],
         message=f"{len(created)} bill(s) queued for processing",

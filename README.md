@@ -50,7 +50,7 @@ python -m venv .venv
 pip install -r requirements.txt
 # Start MariaDB + Redis locally, update .env
 uvicorn app.main:app --reload
-celery -A app.tasks.celery_app worker --loglevel=info
+celery -A app.tasks.celery_app:celery_app worker --loglevel=info --pool=solo --concurrency=1
 ```
 
 **Frontend**

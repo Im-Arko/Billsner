@@ -3,6 +3,7 @@
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -44,16 +45,22 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"
 
     # LLM
-    LLM_PROVIDER: Literal["groq", "ollama"] = "groq"
+    LLM_PROVIDER: Literal["", "groq", "ollama"] = ""
     GROQ_API_KEY: str = ""
-    GROQ_MODEL: str = "mixtral-8x7b-32768"
-    OLLAMA_BASE_URL: str = "http://ollama:11434"
-    OLLAMA_MODEL: str = "llama3.2"
+    GROQ_MODEL: str  | None = None
+    OLLAMA_BASE_URL: str | None = None
+    OLLAMA_MODEL: str | None = None
+    LLM_TIMEOUT_SECONDS: int = 30
+    LLM_PARSER_TIMEOUT_SECONDS: int = 15
 
     # Vector store
     CHROMA_PERSIST_DIR: str = "./data/chroma"
     EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
     DUPLICATE_SIMILARITY_THRESHOLD: float = 0.85
+
+    # Background task safety
+    BILL_PROCESSING_TIMEOUT_SECONDS: int = 590
+    DB_OPERATION_TIMEOUT_SECONDS: int = 30
 
     # OCR
     POPPLER_PATH: str | None = None
@@ -65,6 +72,17 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+
+    @field_validator("DEBUG", mode="before")
+    @classmethod
+    def parse_debug(cls, value: object) -> object:
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"release", "production", "prod", "false", "0", "no", "off"}:
+                return False
+            if normalized in {"debug", "development", "dev", "true", "1", "yes", "on"}:
+                return True
+        return value
 
 
 @lru_cache

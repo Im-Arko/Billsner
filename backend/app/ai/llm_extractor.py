@@ -5,14 +5,23 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from typing import Any
+from urllib.parse import urljoin
 
-from langchain_core.output_parsers import JsonOutputParser
-from langchain_core.prompts import ChatPromptTemplate
+import httpx
+
 from pydantic import BaseModel, Field
 
 from app.ai.classifier import classify_by_keywords
 from app.config import get_settings
+
+try:
+    from langchain_core.output_parsers import JsonOutputParser
+    from langchain_core.prompts import ChatPromptTemplate
+except ImportError:
+    JsonOutputParser = None
+    ChatPromptTemplate = None
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -37,7 +46,7 @@ Return strict JSON with these keys:
 - line_items (array of {{description, quantity, unit_price, amount}})
 - classification_confidence (0-1 based on clarity of text)
 
-JSON only, no markdown."""
+JSON only, no markdown. Do not include reasoning, analysis, or <think> blocks."""
 
 
 class ExtractionSchema(BaseModel):
@@ -57,20 +66,116 @@ class ExtractionSchema(BaseModel):
 
 def _get_llm():
     if settings.LLM_PROVIDER == "ollama":
-        from langchain_community.chat_models import ChatOllama
-
-        return ChatOllama(
-            base_url=settings.OLLAMA_BASE_URL,
-            model=settings.OLLAMA_MODEL,
-            temperature=0,
-        )
+        raise RuntimeError("Ollama is invoked through the direct HTTP client")
+    if settings.LLM_PROVIDER != "groq":
+        raise RuntimeError("No LLM provider configured")
     from langchain_groq import ChatGroq
 
     return ChatGroq(
         api_key=settings.GROQ_API_KEY,
         model=settings.GROQ_MODEL,
         temperature=0,
+        timeout=settings.LLM_TIMEOUT_SECONDS,
     )
+
+
+def _log_stage(stage: str, event: str, **fields: Any) -> None:
+    field_text = " ".join(f"{key}={value}" for key, value in fields.items())
+    logger.info(
+        "bill_processing_stage stage=%s event=%s %s",
+        stage,
+        event,
+        field_text,
+        extra={"stage": stage, "event": event, **fields},
+    )
+
+
+def _keyword_extraction(text: str, reason: str) -> ExtractionSchema:
+    keyword_cat, kw_conf = classify_by_keywords(text)
+    logger.warning(
+        "llm_keyword_fallback reason=%s category=%s confidence=%.2f",
+        reason,
+        keyword_cat,
+        kw_conf,
+    )
+    return ExtractionSchema(
+        expense_category=keyword_cat,
+        classification_confidence=kw_conf,
+    )
+
+
+def _timed_call(stage: str, func, timeout_seconds: int | None = None):
+    start = time.perf_counter()
+    _log_stage(stage, "start", timeout_seconds=timeout_seconds)
+    try:
+        result = func()
+    except Exception:
+        elapsed_ms = round((time.perf_counter() - start) * 1000, 2)
+        logger.exception(
+            "%s failed",
+            stage,
+            extra={"stage": stage, "event": "error", "elapsed_ms": elapsed_ms},
+        )
+        raise
+
+    elapsed_ms = round((time.perf_counter() - start) * 1000, 2)
+    if timeout_seconds is not None and elapsed_ms > timeout_seconds * 1000:
+        logger.error(
+            "%s exceeded timeout after returning",
+            stage,
+            extra={"stage": stage, "event": "timeout", "elapsed_ms": elapsed_ms},
+        )
+        raise TimeoutError(f"{stage} exceeded {timeout_seconds}s")
+    _log_stage(stage, "end", elapsed_ms=elapsed_ms)
+    return result
+
+
+def _prompt_messages(prompt_value) -> list[dict[str, str]]:
+    messages: list[dict[str, str]] = []
+    for message in prompt_value.to_messages():
+        role = "user"
+        message_type = getattr(message, "type", "")
+        if message_type in {"system", "human", "ai"}:
+            role = "user" if message_type == "human" else message_type
+        messages.append({"role": role, "content": str(message.content)})
+    return messages
+
+
+def _invoke_ollama(prompt_value) -> str:
+    if not settings.OLLAMA_BASE_URL:
+        raise RuntimeError("OLLAMA_BASE_URL is not configured")
+    if not settings.OLLAMA_MODEL:
+        raise RuntimeError("OLLAMA_MODEL is not configured")
+
+    url = urljoin(settings.OLLAMA_BASE_URL.rstrip("/") + "/", "api/chat")
+    timeout = httpx.Timeout(
+        connect=10.0,
+        read=float(settings.LLM_TIMEOUT_SECONDS),
+        write=10.0,
+        pool=10.0,
+    )
+    payload = {
+        "model": settings.OLLAMA_MODEL,
+        "messages": _prompt_messages(prompt_value),
+        "stream": False,
+        "format": "json",
+        "keep_alive": "0",
+        "think": False,
+        "options": {
+            "temperature": 0,
+            "num_predict": 128,
+            "num_ctx": 2048,
+        },
+    }
+    with httpx.Client(timeout=timeout) as client:
+        response = client.post(url, json=payload)
+        response.raise_for_status()
+    data = response.json()
+    message = data.get("message") or {}
+    content = message.get("content")
+    if not isinstance(content, str):
+        raise ValueError(f"Unexpected Ollama response shape: {data!r}")
+    return content
 
 
 def _parse_json_fallback(text: str) -> dict[str, Any]:
@@ -84,35 +189,81 @@ def extract_structured_data(ocr_text: str, max_retries: int = 2) -> ExtractionSc
     if not ocr_text.strip():
         return ExtractionSchema(classification_confidence=0.0)
 
-    parser = JsonOutputParser(pydantic_object=ExtractionSchema)
-    prompt = ChatPromptTemplate.from_messages(
-        [("system", "You extract invoice data. Never hallucinate."), ("human", EXTRACTION_PROMPT)]
-    )
-    chain = prompt | _get_llm() | parser
+    if not settings.LLM_PROVIDER:
+        _log_stage("llm", "skipped", reason="no_provider_configured")
+        return _keyword_extraction(ocr_text, "no_provider_configured")
 
-    last_error: Exception | None = None
-    for attempt in range(max_retries + 1):
-        try:
-            result = chain.invoke({"text": ocr_text[:12000]})
-            if isinstance(result, dict):
-                return ExtractionSchema.model_validate(result)
-            return result
-        except Exception as exc:
-            last_error = exc
-            logger.warning("LLM extraction attempt %s failed: %s", attempt + 1, exc)
+    if JsonOutputParser is None or ChatPromptTemplate is None:
+        logger.error("LangChain core is unavailable")
+        return _keyword_extraction(ocr_text, "langchain_core_unavailable")
 
     try:
-        llm = _get_llm()
-        raw = llm.invoke(EXTRACTION_PROMPT.format(text=ocr_text[:12000]))
-        content = raw.content if hasattr(raw, "content") else str(raw)
-        data = _parse_json_fallback(content)
-        return ExtractionSchema.model_validate(data)
-    except Exception as exc:
-        logger.error("Fallback parsing failed: %s", exc)
-        last_error = exc
+        _log_stage("llm_setup", "start", provider=settings.LLM_PROVIDER)
+        parser = JsonOutputParser(pydantic_object=ExtractionSchema)
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", "You extract invoice data. Never hallucinate."),
+                ("human", EXTRACTION_PROMPT),
+            ]
+        )
+        prompt_value = prompt.invoke({"text": ocr_text[:12000]})
+        _log_stage("llm_setup", "end", provider=settings.LLM_PROVIDER)
+    except Exception:
+        logger.exception("LLM setup failed")
+        return _keyword_extraction(ocr_text, "llm_setup_failed")
 
-    keyword_cat, kw_conf = classify_by_keywords(ocr_text)
-    return ExtractionSchema(
-        expense_category=keyword_cat,
-        classification_confidence=kw_conf * 0.5,
+    try:
+        if settings.LLM_PROVIDER == "ollama":
+            content = _timed_call(
+                "ollama_http",
+                lambda: _invoke_ollama(prompt_value),
+                settings.LLM_TIMEOUT_SECONDS,
+            )
+        else:
+            llm = _get_llm()
+            raw = _timed_call(
+                "llm_invoke",
+                lambda: llm.invoke(prompt_value),
+                settings.LLM_TIMEOUT_SECONDS,
+            )
+            content = raw.content if hasattr(raw, "content") else str(raw)
+    except Exception:
+        logger.exception("LLM invoke failed; using keyword fallback")
+        return _keyword_extraction(ocr_text, "llm_invoke_failed")
+    _log_stage("llm_response", "end", content_length=len(content))
+
+    try:
+        parsed = _timed_call(
+            "parser",
+            lambda: parser.parse(content),
+            settings.LLM_PARSER_TIMEOUT_SECONDS,
+        )
+    except Exception:
+        logger.exception("LangChain parser failed; trying JSON extraction fallback")
+        try:
+            parsed = _timed_call(
+                "parser_fallback",
+                lambda: _parse_json_fallback(content),
+                settings.LLM_PARSER_TIMEOUT_SECONDS,
+            )
+        except Exception:
+            logger.exception("All parser paths failed; using keyword fallback")
+            return _keyword_extraction(ocr_text, "parser_failed")
+
+    try:
+        extracted = _timed_call(
+            "schema_validation",
+            lambda: ExtractionSchema.model_validate(parsed),
+            settings.LLM_PARSER_TIMEOUT_SECONDS,
+        )
+    except Exception:
+        logger.exception("Schema validation failed; using keyword fallback")
+        return _keyword_extraction(ocr_text, "schema_validation_failed")
+    _log_stage(
+        "llm_extract",
+        "end",
+        vendor_present=bool(extracted.vendor_name),
+        amount_present=extracted.total_amount is not None,
+        category=extracted.expense_category,
     )
+    return extracted
