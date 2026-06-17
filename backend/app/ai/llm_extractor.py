@@ -29,6 +29,20 @@ settings = get_settings()
 EXTRACTION_PROMPT = """You are an expert invoice parser. Extract ONLY fields explicitly present in the bill text.
 Do NOT invent or guess values. Use null for missing fields.
 
+Important rules:
+- OCR text may contain recognition errors.
+- The Indian Rupee symbol (₹) is often incorrectly recognized as '7'.
+- If an amount appears unusually large and seems to be caused by a leading '7' replacing the ₹ symbol, correct it when the correction is obvious.
+  Example:
+    7366.00 -> 366.00
+    7678.00 -> 678.00
+- Use contextual clues such as subtotal, tax, total, and line item consistency.
+- Do not invent vendors, dates, GST numbers, or amounts.
+- Use null when a value cannot be determined confidently.
+- Expense category must be one of:
+  Fuel, Hotel, Food, Travel, Medical, Shopping, Miscellaneous
+
+
 Bill text:
 {text}
 
@@ -186,6 +200,7 @@ def _parse_json_fallback(text: str) -> dict[str, Any]:
 
 
 def extract_structured_data(ocr_text: str, max_retries: int = 2) -> ExtractionSchema:
+    print(ocr_text)
     if not ocr_text.strip():
         return ExtractionSchema(classification_confidence=0.0)
 
