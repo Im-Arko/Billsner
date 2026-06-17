@@ -1,4 +1,4 @@
-# AI-Based Expense Bill Analyzer
+# Billsner: AI-Based Expense Bill Analyzer
 
 Production-oriented full-stack platform that uploads bills/invoices, runs OCR + LLM extraction, classifies expenses, detects semantic duplicates, and supports natural-language search with dashboards and exports.
 
