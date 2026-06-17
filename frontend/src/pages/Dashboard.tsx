@@ -369,7 +369,7 @@ export default function Dashboard() {
                       fontWeight={700}
                       tickLine={false}
                       axisLine={false}
-                      tickFormatter={(v) => `₹${(v / 1000).toFixed(1)}k`}
+                      tickFormatter={(v) => v < 1000 ? `₹${v}` : `₹${(v/1000).toFixed(0)}k`}
                       width={40}
                       domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.2 / 1000) * 1000]}
                       tickCount={5}
