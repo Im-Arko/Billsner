@@ -21,11 +21,12 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
 
     # Database (MariaDB / local development)
+    # Use port 3307 when MariaDB runs via `docker compose up -d mariadb`
     DATABASE_URL: str = (
-        "mysql+aiomysql://billuser:billpass@localhost:3306/billanalyser"
+        "mysql+aiomysql://billuser:billpass@localhost:3307/billanalyser"
     )
     DATABASE_SYNC_URL: str = (
-        "mysql+pymysql://billuser:billpass@localhost:3306/billanalyser"
+        "mysql+pymysql://billuser:billpass@localhost:3307/billanalyser"
     )
 
     # JWT

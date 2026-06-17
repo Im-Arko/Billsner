@@ -13,6 +13,7 @@ from pdf2image import convert_from_path
 from PIL import Image
 
 from app.config import get_settings
+from app.ai.ocr_text import fix_rupee_ocr_errors
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -114,6 +115,7 @@ def extract_text_from_file(file_path: str | Path) -> OCRResultData:
             confidences.append(conf)
 
     raw = "\n\n".join(combined_text).strip()
+    raw = fix_rupee_ocr_errors(raw)
     avg_conf = sum(confidences) / len(confidences) if confidences else 0.0
     if avg_conf < settings.OCR_MIN_CONFIDENCE and raw:
         logger.warning("Low OCR confidence: %.2f", avg_conf)

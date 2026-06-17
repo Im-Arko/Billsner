@@ -12,7 +12,9 @@ dist/
 
 # Data
 uploads/
+backend/uploads/
 data/
+backend/data/
 *.db
 
 # IDE

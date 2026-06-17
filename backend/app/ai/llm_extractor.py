@@ -14,6 +14,7 @@ import httpx
 from pydantic import BaseModel, Field
 
 from app.ai.classifier import classify_by_keywords
+from app.ai.ocr_text import fix_rupee_ocr_errors
 from app.config import get_settings
 
 try:
@@ -25,49 +26,6 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
-
-def fix_rupee_ocr_errors(text: str) -> str:
-    """
-    Fix amounts where OCR misread ₹ as 7.
-
-    Examples:
-    7366.00 -> 366.00
-    7678.00 -> 678.00
-    7699.00 -> 699.00
-
-    But leaves:
-    73596.00
-    712345.00
-    unchanged.
-    """
-
-    def replace_match(match):
-        amount = match.group(0)
-
-        # Remove leading 7
-        corrected = amount[1:]
-
-        try:
-            original_val = float(amount)
-            corrected_val = float(corrected)
-
-            # Heuristic:
-            # If removing the leading 7 reduces the value by exactly 7000
-            # and produces a realistic receipt line-item amount.
-            if (
-                original_val - corrected_val == 7000
-                and corrected_val < 2000
-            ):
-                return corrected
-
-        except ValueError:
-            pass
-
-        return amount
-
-    pattern = r"\b7\d{2,3}\.\d{2}\b"
-
-    return re.sub(pattern, replace_match, text)
 
 EXTRACTION_PROMPT = """You are an expert invoice parser. Extract ONLY fields explicitly present in the bill text.
 Do NOT invent or guess values. Use null for missing fields.
@@ -243,15 +201,7 @@ def _parse_json_fallback(text: str) -> dict[str, Any]:
 
 
 def extract_structured_data(ocr_text: str, max_retries: int = 2) -> ExtractionSchema:
-    
-    print("RAW OCR:")
-    print(ocr_text)
-
     ocr_text = fix_rupee_ocr_errors(ocr_text)
-
-    print("CLEANED OCR:")
-    print(ocr_text)
-
 
     if not ocr_text.strip():
         return ExtractionSchema(classification_confidence=0.0)
