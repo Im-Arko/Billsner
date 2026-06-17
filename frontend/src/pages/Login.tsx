@@ -550,7 +550,7 @@ export default function Login() {
             <div className="wordmark">
               <div className="wordmark-icon">🧾</div>
               <div>
-                <div className="wordmark-text">BillScan</div>
+                <div className="wordmark-text">Billsner</div>
                 <span className="wordmark-sub">AI Expense Tracker</span>
               </div>
             </div>

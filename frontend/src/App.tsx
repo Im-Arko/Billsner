@@ -25,7 +25,7 @@ function PrivateLayout({ children }: { children: React.ReactNode }) {
         <div className="sidebar-logo">
           <div className="sidebar-logo-icon">🧾</div>
           <div className="sidebar-logo-text">
-            <div className="sidebar-logo-name">BillScan</div>
+            <div className="sidebar-logo-name">Billsner</div>
             <div className="sidebar-logo-tagline">
               AI Expense Tracker
             </div>
