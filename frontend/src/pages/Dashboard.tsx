@@ -350,18 +350,48 @@ export default function Dashboard() {
                 </div>
               )}
               {trendData.length > 0 && (
-                <div className="ds-chart-card">
-                  <p className="ds-section-label">Monthly trend</p>
-                  <ResponsiveContainer width="100%" height={240}>
-                    <BarChart data={trendData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                      <XAxis dataKey="label" stroke="#d4d4d4" fontSize={10} fontWeight={700} tickLine={false} axisLine={false} />
-                      <YAxis stroke="#d4d4d4" fontSize={10} fontWeight={700} tickLine={false} axisLine={false} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
-                      <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(0,0,0,0.03)" }} />
-                      <Bar dataKey="total" name="Total" fill="#2563eb" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+              <div className="ds-chart-card">
+                <p className="ds-section-label">Monthly trend</p>
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={trendData} margin={{ top: 4, right: 4, bottom: 0, left: 32 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                    <XAxis
+                      dataKey="label"
+                      stroke="#d4d4d4"
+                      fontSize={10}
+                      fontWeight={700}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis
+                      stroke="#d4d4d4"
+                      fontSize={10}
+                      fontWeight={700}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(v) => `₹${(v / 1000).toFixed(1)}k`}
+                      width={40}
+                      domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.2 / 1000) * 1000]}
+                      tickCount={5}
+                      allowDecimals={false}
+                    />
+                    {/* <YAxis
+                      stroke="#d4d4d4"
+                      fontSize={10}
+                      fontWeight={700}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`}
+                      width={36}
+                      domain={[0, 'auto']}
+                      tickCount={5}
+                      allowDecimals={false}
+                    /> */}
+                    <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(0,0,0,0.03)" }} />
+                    <Bar dataKey="total" name="Total" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
               )}
             </div>
           </>
