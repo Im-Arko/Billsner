@@ -120,11 +120,14 @@ export default function Expenses() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700&family=DM+Sans:wght@300;400;500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
-        .exp-root { font-family: 'DM Sans', sans-serif; color: #e8e6e0; animation: fadeUp 0.4s ease both; }
-        @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
-
+        .exp-root {
+          font-family: 'Inter', system-ui, sans-serif;
+          color: #0a0a0a;
+          background: #f5f5f4;
+          min-height: 100vh;
+        }
         .exp-topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.75rem; }
         .exp-title { font-family: 'Syne', sans-serif; font-size: 1.6rem; font-weight: 700; color: #f0ede6; letter-spacing: -0.03em; margin: 0; }
 
@@ -169,7 +172,7 @@ export default function Expenses() {
         .exp-filter-select { flex: 0 1 160px; min-width: 130px; }
 
         .exp-search-btn {
-          background: linear-gradient(135deg, #f59e0b, #d97706); border: none;
+          background: (135deg, #f59e0b, #d97706); border: none;
           border-radius: 9px; padding: 0.6rem 1.125rem;
           font-family: 'DM Sans', sans-serif; font-size: 0.85rem; font-weight: 500;
           color: #0a0a0f; cursor: pointer; white-space: nowrap;
@@ -214,6 +217,210 @@ export default function Expenses() {
 
         .exp-empty { text-align: center; padding: 2.5rem 1.5rem; color: rgba(232,230,224,0.3); font-size: 0.875rem; }
         .exp-loading { text-align: center; padding: 1.5rem; color: rgba(232,230,224,0.3); font-size: 0.875rem; }
+
+
+        .exp-root {
+        font-family: 'Inter', system-ui, sans-serif !important;
+        color: #0a0a0a !important;
+        background: #f5f5f4 !important;
+        min-height: 100vh;
+        padding: 2rem 2.5rem;
+        }
+
+        .exp-title {
+        font-size: 2rem !important;
+        font-weight: 900 !important;
+        letter-spacing: -0.04em !important;
+        color: #0a0a0a !important;
+        margin: 0 !important;
+        line-height: 1 !important;
+        }
+
+        .exp-topbar {
+        margin-bottom: 2rem;
+        }
+
+        /* Cards */
+
+        .exp-filters,
+        .exp-table-card {
+        background: #ffffff !important;
+        border: 1.5px solid #e5e5e5 !important;
+        border-radius: 12px !important;
+        }
+
+        .exp-filters {
+        padding: 1rem 1.25rem;
+        margin-bottom: 1rem;
+        }
+
+        /* Inputs */
+
+        .exp-input {
+        background: #ffffff !important;
+        border: 1.5px solid #d4d4d4 !important;
+        border-radius: 8px !important;
+        color: #0a0a0a !important;
+        font-size: 0.83rem !important;
+        }
+
+        .exp-input::placeholder {
+        color: #a3a3a3 !important;
+        }
+
+        .exp-input {
+        border-color: #2563eb !important;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08) !important;
+        background: #ffffff !important;
+        }
+
+        /* Search Icon */
+
+        .exp-search-icon {
+        color: #a3a3a3 !important;
+        }
+
+        .exp-clear-btn {
+        color: #a3a3a3 !important;
+        }
+
+        .exp-clear-btn {
+        color: #404040 !important;
+        }
+
+        /* Buttons */
+
+        .exp-search-btn,
+        .exp-export-btn {
+        background: #ffffff !important;
+        border: 1.5px solid #d4d4d4 !important;
+        border-radius: 8px !important;
+        color: #0a0a0a !important;
+        font-family: 'Inter', sans-serif !important;
+        font-size: 0.8rem !important;
+        font-weight: 600 !important;
+        text-transform: none !important;
+        letter-spacing: -0.01em !important;
+        box-shadow: none !important;
+        }
+
+        .exp-search-btn:hover(),
+        .exp-export-btn:hover() {
+        background: #f5f5f5 !important;
+        border-color: #a3a3a3 !important;
+        transform: none !important;
+        }
+
+        .exp-search-btn,
+        .exp-export-btn {
+        opacity: 0.4;
+        }
+
+        /* Meta */
+
+        .exp-meta {
+        color: #737373 !important;
+        font-size: 0.8rem;
+        }
+
+        .exp-dup-warn {
+        color: #ea580c !important;
+        }
+
+        /* Error */
+
+        .exp-error {
+        background: #fef2f2 !important;
+        border: 1.5px solid #fca5a5 !important;
+        color: #b91c1c !important;
+        border-radius: 10px !important;
+        }
+
+        /* Table */
+
+        .exp-table {
+        width: 100%;
+        border-collapse: collapse;
+        }
+
+        .exp-th {
+        background: #fafafa !important;
+        color: #a3a3a3 !important;
+        font-size: 0.65rem !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.08em !important;
+        text-transform: uppercase !important;
+        border-bottom: 1.5px solid #f5f5f5 !important;
+        padding: 0.55rem 1rem !important;
+        }
+
+        .exp-td {
+        color: #404040 !important;
+        font-size: 0.83rem !important;
+        border-bottom: 1px solid #f5f5f5 !important;
+        padding: 0.75rem 1rem !important;
+        }
+
+        .exp-tr .exp-td {
+        background: #fafafa !important;
+        }
+
+        .exp-tr-dup .exp-td {
+        opacity: 0.65;
+        }
+
+        /* Amount */
+
+        .exp-amount {
+        color: #0a0a0a !important;
+        font-weight: 700 !important;
+        }
+
+        /* Category Pills */
+
+        .exp-cat-pill {
+        background: #eff6ff !important;
+        border: 1.5px solid #93c5fd !important;
+        color: #1d4ed8 !important;
+        border-radius: 6px !important;
+        padding: 0.18rem 0.55rem !important;
+        font-size: 0.65rem !important;
+        font-weight: 800 !important;
+        }
+
+        .exp-cat-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        }
+
+        /* Status Badges */
+
+        .exp-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.18rem 0.55rem;
+        border-radius: 6px;
+        font-size: 0.65rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        }
+
+        /* Confidence */
+
+        .exp-conf {
+        color: #a3a3a3 !important;
+        }
+
+        /* Empty States */
+
+        .exp-empty,
+        .exp-loading {
+        color: #737373 !important;
+        padding: 3rem 1.5rem;
+        text-align: center;
+        }
       `}</style>
 
       <div className="exp-root">

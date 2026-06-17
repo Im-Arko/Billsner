@@ -13,7 +13,9 @@ class OCRResult(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     bill_id: Mapped[int] = mapped_column(
-        ForeignKey("bills.id"), unique=True, index=True
+        ForeignKey("bills.id", ondelete="CASCADE"),
+        unique=True,
+        index=True,
     )
     raw_text: Mapped[str] = mapped_column(Text)
     confidence_score: Mapped[float] = mapped_column(Float)

@@ -24,10 +24,12 @@ function PrivateLayout({ children }: { children: React.ReactNode }) {
       <aside className="sidebar">
         <div className="sidebar-logo">
           <div className="sidebar-logo-icon">🧾</div>
-          <h1>
-            BillScan
-            <span>AI Expense Tracker</span>
-          </h1>
+          <div className="sidebar-logo-text">
+            <div className="sidebar-logo-name">BillScan</div>
+            <div className="sidebar-logo-tagline">
+              AI Expense Tracker
+            </div>
+          </div>
         </div>
 
         <span className="nav-section-label">Navigation</span>

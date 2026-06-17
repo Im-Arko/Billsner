@@ -89,10 +89,11 @@ export default function Login() {
           position: absolute;
           inset: 0;
           background-image:
-            linear-gradient(rgba(245,158,11,0.03) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(245,158,11,0.03) 1px, transparent 1px);
+            linear-gradient(#f5f5f5 1px, transparent 1px),
+            linear-gradient(90deg, #f5f5f5 1px, transparent 1px);
           background-size: 48px 48px;
           pointer-events: none;
+          
         }
 
         .panel-tagline {
@@ -336,6 +337,186 @@ export default function Login() {
           text-decoration: none;
         }
         .auth-link:hover { text-decoration: underline; }
+
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+.auth-root {
+  min-height: 100vh;
+  background: #f5f5f4;
+  display: flex;
+  font-family: 'Inter', sans-serif;
+  color: #0a0a0a;
+}
+
+.auth-root::before,
+.auth-root::after {
+  display: none;
+}
+
+.auth-panel-left {
+  background: #ffffff;
+  border-right: 1.5px solid #e5e5e5;
+}
+
+
+.panel-tagline {
+  font-size: 3rem;
+  font-weight: 900;
+  letter-spacing: -0.05em;
+  color: #0a0a0a;
+  font-family: 'Inter', sans-serif;
+}
+
+.panel-tagline em {
+  color: #2563eb;
+}
+
+.panel-feature {
+  color: #525252;
+  font-size: 0.9rem;
+}
+
+.panel-feature-dot {
+  background: #2563eb;
+}
+
+.auth-form-box {
+  background: #ffffff;
+  border: 1.5px solid #e5e5e5;
+  border-radius: 16px;
+  padding: 2rem;
+  max-width: 420px;
+}
+
+.wordmark {
+  margin-bottom: 2rem;
+}
+
+.wordmark-icon {
+  width: 44px;
+  height: 44px;
+  background: #2563eb;
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.wordmark-text {
+  font-family: 'Inter', sans-serif;
+  font-size: 1.4rem;
+  font-weight: 900;
+  color: #0a0a0a;
+}
+
+.wordmark-sub {
+  color: #737373;
+  letter-spacing: 0.08em;
+}
+
+.form-heading {
+  font-family: 'Inter', sans-serif;
+  font-size: 2rem;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  color: #0a0a0a;
+}
+
+.form-sub {
+  color: #737373;
+}
+
+.field-label {
+  color: #525252;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.field-icon {
+  color: #a3a3a3;
+}
+
+.field-input {
+  width: 100%;
+  background: #ffffff;
+  border: 1.5px solid #d4d4d4;
+  border-radius: 8px;
+  color: #0a0a0a;
+  font-family: 'Inter', sans-serif;
+}
+
+.field-input::placeholder {
+  color: #a3a3a3;
+}
+
+.field-input:focus {
+  border-color: #2563eb;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.08);
+}
+
+.field-action {
+  color: #a3a3a3;
+}
+
+.field-action:hover {
+  color: #404040;
+}
+
+.error-box {
+  background: #fef2f2;
+  border: 1.5px solid #fca5a5;
+  color: #b91c1c;
+  border-radius: 10px;
+}
+
+.submit-btn {
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  box-shadow: none;
+}
+
+.submit-btn:hover:not(:disabled) {
+  background: #1d4ed8;
+  transform: none;
+}
+
+.submit-btn:disabled {
+  opacity: 0.5;
+}
+
+.spinner-sm {
+  border: 2px solid rgba(255,255,255,0.25);
+  border-top-color: white;
+}
+
+.auth-divider {
+  color: #a3a3a3;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  background: #e5e5e5;
+}
+
+.auth-footer {
+  color: #737373;
+}
+
+.auth-link {
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.auth-link:hover {
+  text-decoration: underline;
+}
+
       `}</style>
 
       <div className="auth-root">

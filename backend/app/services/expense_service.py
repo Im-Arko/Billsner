@@ -1,6 +1,7 @@
 """Expense queries, analytics, and hybrid search."""
 
 from __future__ import annotations
+from fastapi import HTTPException
 
 from datetime import date, timedelta
 from decimal import Decimal
@@ -14,7 +15,8 @@ from app.ai.vector_store import search_similar
 from app.models.bill import Bill
 from app.models.expense import Expense
 from app.schemas.expense import ExpenseFilter, ExpenseSummary
-
+from sqlalchemy import delete
+from app.models.embedding import BillEmbedding
 
 def _apply_filters(stmt, user_id: int, filters: ExpenseFilter):
     conditions = [Expense.user_id == user_id]
@@ -334,3 +336,30 @@ async def get_summary(db: AsyncSession, user_id: int) -> ExpenseSummary:
         duplicate_count=dup_count,
         recent_bills=recent_bills,
     )
+
+async def delete_expense(db: AsyncSession, bill_id: int, user_id: int) -> None:
+    result = await db.execute(
+        select(Expense).where(Expense.bill_id == bill_id, Expense.user_id == user_id)
+    )
+    expense = result.scalar_one_or_none()
+
+    # Delete expense first (if it exists)
+    if expense:
+        await db.delete(expense)
+        await db.flush()  # flush before deleting bill so FK is cleared
+
+    # Delete bill embeddings explicitly before the bill
+    await db.execute(
+        delete(BillEmbedding).where(BillEmbedding.bill_id == bill_id)
+    )
+
+    # Now delete the bill
+    bill_result = await db.execute(
+        select(Bill).where(Bill.id == bill_id, Bill.user_id == user_id)
+    )
+    bill = bill_result.scalar_one_or_none()
+    if not bill:
+        raise HTTPException(status_code=404, detail="Bill not found")
+
+    await db.delete(bill)
+    await db.commit()

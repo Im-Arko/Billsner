@@ -48,11 +48,18 @@ class Bill(Base):
 
     user: Mapped["User"] = relationship(back_populates="bills")
     ocr_result: Mapped["OCRResult | None"] = relationship(
-        back_populates="bill", uselist=False
+        back_populates="bill",
+        uselist=False,
+        cascade="all, delete-orphan",
     )
     expense: Mapped["Expense | None"] = relationship(
-        back_populates="bill", uselist=False
+        back_populates="bill",
+        uselist=False,
+        cascade="all, delete-orphan",
     )
+
     embedding: Mapped["BillEmbedding | None"] = relationship(
-        back_populates="bill", uselist=False
+        back_populates="bill",
+        uselist=False,
+        cascade="all, delete-orphan",
     )

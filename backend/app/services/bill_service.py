@@ -227,7 +227,28 @@ async def process_bill_pipeline(db: AsyncSession, bill_id: int) -> None:
                 meta = top.get("metadata", {})
                 if meta.get("expense_id"):
                     try:
-                        expense.duplicate_of_id = int(meta["expense_id"])
+                        duplicate_id = int(meta["expense_id"])
+
+                        duplicate_expense = await db.get(
+                            Expense,
+                            duplicate_id
+                        )
+                        logger.info(
+                            "Duplicate search result: %s",
+                            top
+                        )
+                        if duplicate_expense:
+                            expense.duplicate_of_id = duplicate_id
+                            logger.info(
+                                "Duplicate search result: %s",
+                                top
+                            )
+                        else:
+                            logger.warning(
+                                "Duplicate candidate %s not found in database",
+                                duplicate_id,
+                            )
+
                     except (TypeError, ValueError):
                         pass
 

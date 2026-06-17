@@ -21,8 +21,6 @@ settings = get_settings()
 if settings.TESSERACT_CMD:
     pytesseract.pytesseract.tesseract_cmd = settings.TESSERACT_CMD
 
-print("POPPLER:", settings.POPPLER_PATH)
-print("TESSERACT:", settings.TESSERACT_CMD)
 
 
 @dataclass

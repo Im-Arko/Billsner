@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from app.services import expense_service
 from app.api.deps import get_current_user
 from app.database import get_db
 from app.models.expense import Expense
@@ -66,3 +66,11 @@ async def update_expense(
         setattr(expense, field, value)
     await db.flush()
     return expense
+
+@router.delete("/{bill_id}", status_code=204)
+async def delete_expense(
+    bill_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await expense_service.delete_expense(db, bill_id, current_user.id)
