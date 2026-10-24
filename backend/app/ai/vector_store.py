@@ -1,51 +1,48 @@
-"""ChromaDB embedding store for semantic search and duplicate detection."""
+"""Persistent text similarity index. Uses SQLite and requires no model downloads.
 
-from __future__ import annotations
+The existing embedding function names are retained for pipeline compatibility.
+Similarity is lexical cosine similarity, not neural semantic similarity.
+"""
 
-import logging
-import uuid
+from collections import Counter
+from contextlib import contextmanager
+import json
+import math
+from pathlib import Path
+import re
+import sqlite3
 from typing import Any
-
-import chromadb
-from chromadb.config import Settings as ChromaSettings
-from sentence_transformers import SentenceTransformer
 
 from app.config import get_settings
 
-logger = logging.getLogger(__name__)
 settings = get_settings()
-
-COLLECTION_NAME = "bill_expenses"
-_model: SentenceTransformer | None = None
-_client: chromadb.ClientAPI | None = None
+STOP_WORDS = {"vendor", "amount", "category", "date", "unknown", "the", "and", "of", "for", "in", "at", "from", "show", "expenses", "expense"}
 
 
-def _get_model() -> SentenceTransformer:
-    global _model
-    if _model is None:
-        _model = SentenceTransformer(settings.EMBEDDING_MODEL)
-    return _model
+@contextmanager
+def _index():
+    path = Path(settings.SEARCH_INDEX_PATH)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(path, timeout=30)
+    try:
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("CREATE TABLE IF NOT EXISTS documents (id TEXT PRIMARY KEY, bill_id INTEGER NOT NULL, user_id INTEGER NOT NULL, document TEXT NOT NULL, metadata TEXT NOT NULL)")
+        connection.execute("CREATE INDEX IF NOT EXISTS documents_owner ON documents(user_id)")
+        yield connection
+        connection.commit()
+    finally:
+        connection.close()
 
 
-def _get_client() -> chromadb.ClientAPI:
-    global _client
-    if _client is None:
-        _client = chromadb.PersistentClient(
-            path=settings.CHROMA_PERSIST_DIR,
-            settings=ChromaSettings(anonymized_telemetry=False),
-        )
-    return _client
+def _features(text: str) -> Counter:
+    tokens = [token for token in re.findall(r"[\w]+", text.casefold()) if token not in STOP_WORDS]
+    return Counter(tokens + [f"{a} {b}" for a, b in zip(tokens, tokens[1:])])
 
 
-def _collection():
-    return _get_client().get_or_create_collection(
-        name=COLLECTION_NAME,
-        metadata={"hnsw:space": "cosine"},
-    )
-
-
-def embed_text(text: str) -> list[float]:
-    return _get_model().encode(text, normalize_embeddings=True).tolist()
+def _similarity(left: Counter, right: Counter) -> float:
+    numerator = sum(value * right.get(key, 0) for key, value in left.items())
+    norm = math.sqrt(sum(v*v for v in left.values()) * sum(v*v for v in right.values()))
+    return numerator / norm if norm else 0.0
 
 
 def build_document_text(
@@ -65,75 +62,44 @@ def build_document_text(
     return "\n".join(p for p in parts if p)
 
 
-def upsert_bill_embedding(
-    bill_id: int,
-    user_id: int,
-    document: str,
-    metadata: dict[str, Any],
-) -> str:
-    chroma_id = f"bill_{bill_id}_{uuid.uuid4().hex[:8]}"
-    embedding = embed_text(document)
-    col = _collection()
-    col.upsert(
-        ids=[chroma_id],
-        embeddings=[embedding],
-        documents=[document],
-        metadatas=[
-            {
-                **{k: (str(v) if v is not None else "") for k, v in metadata.items()},
-                "bill_id": str(bill_id),
-                "user_id": str(user_id),
-            }
-        ],
-    )
-    return chroma_id
 
-
-def search_similar(
-    query: str,
-    user_id: int,
-    n_results: int = 10,
-    where: dict[str, Any] | None = None,
-) -> list[dict[str, Any]]:
-    embedding = embed_text(query)
-    filter_meta: dict[str, Any] = {"user_id": str(user_id)}
-    if where:
-        filter_meta.update({k: str(v) for k, v in where.items()})
-    col = _collection()
-    results = col.query(
-        query_embeddings=[embedding],
-        n_results=n_results,
-        where=filter_meta,
-        include=["documents", "metadatas", "distances"],
-    )
-    items: list[dict[str, Any]] = []
-    if not results["ids"] or not results["ids"][0]:
-        return items
-    for i, cid in enumerate(results["ids"][0]):
-        dist = results["distances"][0][i] if results["distances"] else 1.0
-        similarity = 1.0 - dist
-        meta = results["metadatas"][0][i] if results["metadatas"] else {}
-        items.append(
-            {
-                "chroma_id": cid,
-                "similarity_score": round(similarity, 4),
-                "metadata": meta,
-                "document": results["documents"][0][i] if results["documents"] else "",
-            }
+def upsert_bill_embedding(bill_id: int, user_id: int, document: str, metadata: dict[str, Any]) -> str:
+    document_id = f"bill_{bill_id}"
+    metadata = {**{k: str(v) if v is not None else "" for k, v in metadata.items()},
+                "bill_id": str(bill_id), "user_id": str(user_id)}
+    with _index() as connection:
+        connection.execute(
+            "INSERT INTO documents(id, bill_id, user_id, document, metadata) VALUES (?, ?, ?, ?, ?) "
+            "ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id, document=excluded.document, metadata=excluded.metadata",
+            (document_id, bill_id, user_id, document, json.dumps(metadata)),
         )
-    return items
+    return document_id
 
 
-def find_duplicates(
-    document: str,
-    user_id: int,
-    bill_id: int,
-    n_results: int = 5,
-) -> list[dict[str, Any]]:
+def delete_bill_embeddings(bill_id: int, user_id: int) -> None:
+    with _index() as connection:
+        connection.execute("DELETE FROM documents WHERE bill_id=? AND user_id=?", (bill_id, user_id))
+
+
+def search_similar(query: str, user_id: int, n_results: int = 10,
+                   where: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    with _index() as connection:
+        rows = connection.execute("SELECT id, document, metadata FROM documents WHERE user_id=?", (user_id,)).fetchall()
+    features = _features(query)
+    hits = []
+    for document_id, document, metadata_json in rows:
+        metadata = json.loads(metadata_json)
+        if where and any(str(metadata.get(k)) != str(v) for k, v in where.items()):
+            continue
+        similarity = _similarity(features, _features(document))
+        if similarity > 0:
+            hits.append({"chroma_id": document_id, "document": document, "metadata": metadata,
+                         "similarity_score": round(similarity, 4)})
+    return sorted(hits, key=lambda item: item["similarity_score"], reverse=True)[:n_results]
+
+
+def find_duplicates(document: str, user_id: int, bill_id: int, n_results: int = 5) -> list[dict[str, Any]]:
     matches = search_similar(document, user_id, n_results=n_results + 1)
-    return [
-        m
-        for m in matches
-        if str(m["metadata"].get("bill_id")) != str(bill_id)
-        and m["similarity_score"] >= settings.DUPLICATE_SIMILARITY_THRESHOLD - 0.1
-    ][:n_results]
+    return [m for m in matches
+            if str(m["metadata"].get("bill_id")) != str(bill_id)
+            and m["similarity_score"] >= settings.DUPLICATE_SIMILARITY_THRESHOLD - 0.1][:n_results]

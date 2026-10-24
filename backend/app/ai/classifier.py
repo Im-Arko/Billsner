@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import logging
 
-from langchain_core.prompts import ChatPromptTemplate
+import json
+import math
+
+from app.ai.groq_client import complete_json
 
 from app.config import get_settings
 
@@ -46,65 +49,26 @@ def classify_by_keywords(text: str) -> tuple[str, float]:
     return best, confidence
 
 
-def _get_llm():
-    if settings.LLM_PROVIDER == "ollama":
-        from langchain_ollama import ChatOllama
 
-        return ChatOllama(
-            base_url=settings.OLLAMA_BASE_URL,
-            model=settings.OLLAMA_MODEL,
-            temperature=0,
-        )
-    from langchain_groq import ChatGroq
-
-    return ChatGroq(
-        api_key=settings.GROQ_API_KEY,
-        model=settings.GROQ_MODEL,
-        temperature=0,
-    )
-
-
-def classify_expense(
-    text: str,
-    vendor_name: str | None = None,
-) -> tuple[str, list[str], float, str]:
+def classify_expense(text: str, vendor_name: str | None = None) -> tuple[str, list[str], float, str]:
     combined = f"{vendor_name or ''}\n{text}".strip()
     kw_cat, kw_conf = classify_by_keywords(combined)
-
-    if not settings.GROQ_API_KEY and settings.LLM_PROVIDER == "groq":
-        return kw_cat, [], kw_conf, "keyword"
-
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                f"Classify expense into one primary category from: {', '.join(CATEGORIES)}. "
-                "Also suggest up to 2 secondary categories. Respond as: "
-                "PRIMARY|secondary1,secondary2|confidence(0-1)",
-            ),
-            ("human", "Vendor: {vendor}\n\nText:\n{text}"),
-        ]
-    )
     try:
-        llm = _get_llm()
-        resp = (prompt | llm).invoke(
-            {"vendor": vendor_name or "unknown", "text": text[:4000]}
+        content = complete_json(
+            "Classify the expense into one of: " + ", ".join(CATEGORIES) +
+            '. Return JSON with category (string), secondary_categories (array), confidence (0 to 1).',
+            combined[:4000],
         )
-        content = resp.content if hasattr(resp, "content") else str(resp)
-        parts = content.strip().split("|")
-        primary = parts[0].strip() if parts else kw_cat
+        parsed = json.loads(content)
+        primary = parsed.get("category", kw_cat)
         if primary not in CATEGORIES:
             primary = kw_cat
-        secondary = []
-        conf = kw_conf
-        if len(parts) > 1 and parts[1].strip():
-            secondary = [s.strip() for s in parts[1].split(",") if s.strip()]
-        if len(parts) > 2:
-            try:
-                conf = float(parts[2].strip())
-            except ValueError:
-                pass
-        return primary, secondary, conf, "llm"
+        secondary = parsed.get("secondary_categories", [])
+        secondary = [s for s in secondary if s in CATEGORIES] if isinstance(secondary, list) else []
+        confidence = float(parsed.get("confidence", kw_conf))
+        if not math.isfinite(confidence):
+            confidence = kw_conf
+        return primary, secondary[:2], min(1.0, max(0.0, confidence)), "groq"
     except Exception as exc:
-        logger.warning("LLM classification failed: %s", exc)
+        logger.warning("Groq classification unavailable; using keywords: %s", exc)
         return kw_cat, [], kw_conf, "keyword"

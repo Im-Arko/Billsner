@@ -5,13 +5,11 @@ python-multipart==0.0.17
 
 # Database
 sqlalchemy[asyncio]==2.0.36
-aiomysql==0.2.0
+aiosqlite==0.19.0
 alembic==1.14.0
-pymysql==1.1.1
 
 # Auth & security
 python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
 bcrypt==4.2.1
 slowapi==0.1.9
 
@@ -20,15 +18,7 @@ pydantic==2.10.3
 pydantic-settings==2.6.1
 email-validator==2.2.0
 
-# AI / ML
-langchain==0.3.13
-langchain-groq
-langchain-huggingface
-langchain-ollama==0.2.3
-langchain-community==0.3.13
-groq>=0.9.0
-chromadb==0.5.23
-sentence-transformers==3.3.1
+# Groq Cloud uses the HTTP client below; no local LLM or embedding runtime.
 
 # OCR & image processing
 pytesseract==0.3.13
@@ -36,10 +26,6 @@ opencv-python-headless==4.10.0.84
 Pillow==11.0.0
 pdf2image==1.17.0
 pypdf==5.1.0
-
-# Background tasks
-celery[redis]==5.4.0
-redis==5.2.1
 
 # Reports
 pandas==2.2.3
@@ -55,4 +41,3 @@ aiofiles==24.1.0
 pytest==8.4.2
 pytest-asyncio==1.4.0
 pytest-anyio
-aiosqlite==0.19.0

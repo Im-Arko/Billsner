@@ -11,12 +11,15 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Awaitable, Callable, TypeVar
 
-from sqlalchemy import select
+from fastapi import HTTPException
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.llm_extractor import extract_structured_data
 from app.ai.ocr_pipeline import extract_text_from_file
-from app.ai.vector_store import build_document_text, find_duplicates, upsert_bill_embedding
+from app.ai.vector_store import (
+    build_document_text, delete_bill_embeddings, find_duplicates, upsert_bill_embedding,
+)
 from app.models.bill import Bill, BillStatus
 from app.models.embedding import BillEmbedding
 from app.models.expense import Expense
@@ -25,6 +28,10 @@ from app.models.vendor import Vendor
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
+
+
+class BillProcessingError(ValueError):
+    """The uploaded bill did not contain a usable expense."""
 
 
 def _log_stage(bill_id: int, stage: str, event: str, **fields) -> None:
@@ -92,7 +99,7 @@ async def process_bill_pipeline(db: AsyncSession, bill_id: int) -> None:
     result = await _timed_db(
         bill_id,
         "db_load_bill",
-        db.execute(select(Bill).where(Bill.id == bill_id)),
+        db.execute(select(Bill).where(Bill.id == bill_id).with_for_update()),
         db_timeout,
     )
     bill = result.scalar_one_or_none()
@@ -100,9 +107,17 @@ async def process_bill_pipeline(db: AsyncSession, bill_id: int) -> None:
         _log_stage(bill_id, "pipeline", "end", reason="bill_not_found")
         return
 
-    bill.status = BillStatus.PROCESSING
-    await _timed_db(bill_id, "db_flush_processing_status", db.flush(), db_timeout)
+    if bill.status in {BillStatus.COMPLETED, BillStatus.PROCESSING}:
+        await db.rollback()
+        _log_stage(bill_id, "pipeline", "end", reason="already_processed_or_running")
+        return
 
+    bill.status = BillStatus.PROCESSING
+    bill.error_message = None
+    user_id = bill.user_id
+    await _timed_db(bill_id, "db_commit_processing_status", db.commit(), db_timeout)
+
+    chroma_id = None
     try:
         ocr_data = _timed_sync(
             bill_id,
@@ -116,13 +131,20 @@ async def process_bill_pipeline(db: AsyncSession, bill_id: int) -> None:
             preprocessing_applied=json.dumps(ocr_data.preprocessing_applied),
         )
         db.add(ocr_row)
-        await _timed_db(bill_id, "db_flush_ocr", db.flush(), db_timeout)
 
         extracted = _timed_sync(
             bill_id,
             "llm_extract",
             lambda: extract_structured_data(ocr_data.raw_text),
         )
+        amount = Decimal(str(extracted.total_amount)) if extracted.total_amount is not None else None
+        if amount is None or not amount.is_finite() or amount <= 0 or amount.quantize(Decimal("0.01")) <= 0:
+            raise BillProcessingError(
+                "Bill couldn't be processed: no valid positive total amount was found. "
+                "Please upload a clearer bill."
+            )
+        # Do not hold SQLite's write lock while waiting on the cloud request.
+        await _timed_db(bill_id, "db_flush_ocr", db.flush(), db_timeout)
         expense_date: date | None = None
         if extracted.date:
             try:
@@ -159,11 +181,7 @@ async def process_bill_pipeline(db: AsyncSession, bill_id: int) -> None:
             vendor_id=vendor_id,
             vendor_name=extracted.vendor_name,
             bill_number=extracted.bill_number,
-            total_amount=(
-                Decimal(str(extracted.total_amount))
-                if extracted.total_amount is not None
-                else None
-            ),
+            total_amount=amount,
             tax_amount=(
                 Decimal(str(extracted.tax_amount))
                 if extracted.tax_amount is not None
@@ -222,8 +240,6 @@ async def process_bill_pipeline(db: AsyncSession, bill_id: int) -> None:
         if dupes:
             top = dupes[0]
             if top["similarity_score"] >= 0.85:
-                expense.is_duplicate = True
-                expense.duplicate_confidence = top["similarity_score"]
                 meta = top.get("metadata", {})
                 if meta.get("expense_id"):
                     try:
@@ -237,7 +253,16 @@ async def process_bill_pipeline(db: AsyncSession, bill_id: int) -> None:
                             "Duplicate search result: %s",
                             top
                         )
-                        if duplicate_expense:
+                        candidate_bill_id = meta.get("bill_id")
+                        if (
+                            duplicate_expense
+                            and duplicate_expense.user_id == user_id
+                            and duplicate_expense.id != expense.id
+                            and candidate_bill_id is not None
+                            and str(duplicate_expense.bill_id) == str(candidate_bill_id)
+                        ):
+                            expense.is_duplicate = True
+                            expense.duplicate_confidence = top["similarity_score"]
                             expense.duplicate_of_id = duplicate_id
                             logger.info(
                                 "Duplicate search result: %s",
@@ -253,12 +278,65 @@ async def process_bill_pipeline(db: AsyncSession, bill_id: int) -> None:
                         pass
 
         bill.status = BillStatus.COMPLETED
+        await _timed_db(bill_id, "db_commit_success", db.commit(), db_timeout)
     except Exception as exc:
-        logger.exception("Bill processing pipeline failed for bill %s", bill_id)
-        bill.status = BillStatus.FAILED
-        bill.error_message = str(exc)[:2000]
+        # A failed flush invalidates the transaction; it must be rolled back before
+        # persisting failure. This also removes any partial OCR/vendor/expense rows.
+        await db.rollback()
+        if isinstance(exc, BillProcessingError):
+            logger.warning("Bill %s couldn't be processed: %s", bill_id, exc)
+        else:
+            logger.exception("Bill processing pipeline failed for bill %s", bill_id)
+        if chroma_id:
+            try:
+                delete_bill_embeddings(bill_id, user_id)
+            except Exception:
+                logger.exception("Could not remove failed bill %s from vector store", bill_id)
+        await _timed_db(
+            bill_id, "db_set_failure_status",
+            db.execute(update(Bill).where(Bill.id == bill_id).values(
+                status=BillStatus.FAILED, error_message=str(exc)[:2000],
+            )), db_timeout,
+        )
         await _timed_db(bill_id, "db_commit_failure_status", db.commit(), db_timeout)
         raise
 
-    await _timed_db(bill_id, "db_commit_success", db.commit(), db_timeout)
     _log_stage(bill_id, "pipeline", "end", status="completed")
+
+
+async def delete_bill(db: AsyncSession, bill_id: int, user_id: int) -> None:
+    result = await db.execute(
+        select(Bill).where(Bill.id == bill_id, Bill.user_id == user_id).with_for_update()
+    )
+    bill = result.scalar_one_or_none()
+    if bill is None:
+        raise HTTPException(status_code=404, detail="Bill not found")
+    if bill.status == BillStatus.PROCESSING:
+        raise HTTPException(status_code=409, detail="Cannot delete a bill while processing")
+
+    expense_id = (await db.execute(
+        select(Expense.id).where(Expense.bill_id == bill_id)
+    )).scalar_one_or_none()
+    if expense_id is not None:
+        await db.execute(
+            update(Expense).where(Expense.duplicate_of_id == expense_id).values(
+                duplicate_of_id=None, is_duplicate=False, duplicate_confidence=None,
+            )
+        )
+
+    stored_path = bill.stored_path
+    needs_vector_cleanup = bill.status in {BillStatus.COMPLETED, BillStatus.FAILED} or (await db.execute(
+        select(BillEmbedding.id).where(BillEmbedding.bill_id == bill_id)
+    )).scalar_one_or_none() is not None
+    # ORM cascades remove the OCR, expense and embedding rows in FK-safe order.
+    await db.delete(bill)
+    await db.commit()
+    if needs_vector_cleanup:
+        try:
+            await asyncio.to_thread(delete_bill_embeddings, bill_id, user_id)
+        except Exception:
+            logger.exception("Could not remove deleted bill %s from vector store", bill_id)
+    try:
+        Path(stored_path).unlink(missing_ok=True)
+    except OSError:
+        logger.exception("Could not remove uploaded file for bill %s", bill_id)

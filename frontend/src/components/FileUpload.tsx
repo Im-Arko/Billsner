@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { useDropzone } from "react-dropzone";
+import { useDropzone, type FileRejection } from "react-dropzone";
 import { api, getErrorMessage } from "../api/client";
 
 const ACCEPT = {
@@ -8,7 +8,7 @@ const ACCEPT = {
   "application/pdf": [".pdf"],
 };
 
-const MAX_SIZE_MB = 20;
+const MAX_SIZE_MB = 10;
 const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
 
 type UploadStatus = "idle" | "uploading" | "success" | "error";
@@ -26,7 +26,7 @@ export function FileUpload({ onUploaded, maxFiles }: FileUploadProps) {
   const [fileCount, setFileCount] = useState(0);
 
   const onDrop = useCallback(
-    async (accepted: File[], rejected: { file: File; errors: { message: string }[] }[]) => {
+    async (accepted: File[], rejected: FileRejection[]) => {
       if (rejected.length) {
         const reasons = rejected
           .map((r) => `${r.file.name}: ${r.errors.map((e) => e.message).join(", ")}`)

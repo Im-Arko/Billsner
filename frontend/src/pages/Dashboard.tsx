@@ -33,11 +33,13 @@ function StatCard({
   );
 }
 
-const STATUS_ORDER = ["processing", "done", "failed"];
+const STATUS_ORDER = ["processing", "pending", "completed", "failed"];
+const isActiveStatus = (status: string) => status === "pending" || status === "processing";
 
 function statusBadge(status: string) {
-  if (status === "done") return { cls: "ds-badge-done", label: "Done" };
+  if (status === "completed") return { cls: "ds-badge-done", label: "Done" };
   if (status === "failed") return { cls: "ds-badge-failed", label: "Failed" };
+  if (status === "pending") return { cls: "ds-badge-processing", label: "Queued" };
   return { cls: "ds-badge-processing", label: "Processing" };
 }
 
@@ -82,12 +84,12 @@ export default function Dashboard() {
     stopPolling();
     pollRef.current = setInterval(async () => {
       const data = await load(true);
-      if (!data?.recent_bills?.some((b) => b.status === "processing")) stopPolling();
+      if (data && !data.recent_bills?.some((b) => isActiveStatus(b.status))) stopPolling();
     }, POLL_INTERVAL);
   }, [load, stopPolling]);
 
   useEffect(() => {
-    const hasProcessing = summary?.recent_bills?.some((b) => b.status === "processing");
+    const hasProcessing = summary?.recent_bills?.some((b) => isActiveStatus(b.status));
     if (hasProcessing && !pollRef.current) startPolling();
     else if (!hasProcessing) stopPolling();
     return stopPolling;
@@ -99,7 +101,7 @@ export default function Dashboard() {
     setDeletingId(id);
     setDeleteError(null);
     try {
-      await api.delete(`/expenses/${id}`);
+      await api.delete(`/bills/${id}`);
       await load(true);
     } catch (err) {
       setDeleteError(getErrorMessage(err, "Failed to delete"));
@@ -414,7 +416,12 @@ export default function Dashboard() {
                   return (
                     <tr key={b.id} style={isDeleting ? { opacity: 0.4 } : undefined}>
                       <td><span className="ds-filename">{b.filename}</span></td>
-                      <td><span className={`ds-badge ${badge.cls}`}>{badge.label}</span></td>
+                      <td>
+                        <span className={`ds-badge ${badge.cls}`}>{badge.label}</span>
+                        {b.status === "failed" && b.error_message && (
+                          <div style={{ color: "#b91c1c", fontSize: "0.75rem", marginTop: "0.25rem" }}>{b.error_message}</div>
+                        )}
+                      </td>
                       <td style={{ color: "#a3a3a3", fontSize: "0.75rem", fontWeight: 600 }}>
                         {new Date(b.created_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" })}
                       </td>

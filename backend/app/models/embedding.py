@@ -1,4 +1,4 @@
-"""Vector embedding metadata (vectors stored in ChromaDB)."""
+"""Metadata linking bills to the embedded text similarity index."""
 
 from datetime import datetime
 

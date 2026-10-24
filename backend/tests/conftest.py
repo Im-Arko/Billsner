@@ -1,10 +1,9 @@
-pytest_plugins = ["pytest_asyncio"]
-
 import uuid
 import pytest_asyncio
 from httpx import AsyncClient
 from httpx import ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy import event
 from sqlalchemy.orm import sessionmaker
 
 from app.api.deps import get_current_user
@@ -13,9 +12,16 @@ from app.main import app
 from app.models.user import User
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture
 async def async_engine():
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def enable_foreign_keys(connection, _):
+        cursor = connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield engine
@@ -39,7 +45,12 @@ async def override_db(async_engine):
 
     async def _get_test_db():
         async with AsyncSessionLocal() as session:
-            yield session
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
 
     app.dependency_overrides[get_db] = _get_test_db
     yield

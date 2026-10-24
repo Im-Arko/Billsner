@@ -82,14 +82,15 @@ def _run_tesseract(img: np.ndarray) -> tuple[str, float]:
     data = pytesseract.image_to_data(
         img, output_type=pytesseract.Output.DICT, config="--psm 6"
     )
-    texts: list[str] = []
+    lines: dict[tuple[int, int, int, int], list[str]] = {}
     confidences: list[float] = []
     for i, text in enumerate(data["text"]):
         conf = float(data["conf"][i])
         if text.strip() and conf > 0:
-            texts.append(text)
+            line_key = tuple(data[key][i] for key in ("page_num", "block_num", "par_num", "line_num"))
+            lines.setdefault(line_key, []).append(text)
             confidences.append(conf)
-    raw = "\n".join(texts)
+    raw = "\n".join(" ".join(words) for words in lines.values())
     avg_conf = sum(confidences) / len(confidences) if confidences else 0.0
     return raw, avg_conf / 100.0
 

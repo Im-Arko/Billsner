@@ -1,6 +1,8 @@
 """FastAPI application entry point."""
 
 import logging
+import asyncio
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -14,6 +16,7 @@ from slowapi.util import get_remote_address
 from app.api.v1.router import api_router
 from app.config import get_settings
 from app.database import Base, engine
+from app.tasks.runner import recover_interrupted_bills, run_pending_bills
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -23,18 +26,25 @@ limiter = Limiter(key_func=get_remote_address, default_limits=[settings.RATE_LIM
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
-    Path(settings.CHROMA_PERSIST_DIR).mkdir(parents=True, exist_ok=True)
+    Path(settings.SEARCH_INDEX_PATH).parent.mkdir(parents=True, exist_ok=True)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Application started")
-    yield
-    await engine.dispose()
+    await recover_interrupted_bills()
+    stop = threading.Event()
+    worker = asyncio.create_task(run_pending_bills(stop))
+    try:
+        yield
+    finally:
+        stop.set()
+        await worker
+        await engine.dispose()
 
 
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="AI-powered expense bill analyzer with OCR, LLM extraction, and semantic search",
+    description="Expense bill analyzer with OCR, Groq Cloud extraction, and text similarity search",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -58,7 +68,9 @@ app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 @app.get("/health")
 @limiter.limit("30/minute")
 async def health(request: Request):
-    return {"status": "healthy", "version": settings.APP_VERSION}
+    return {"status": "healthy", "version": settings.APP_VERSION,
+            "llm_provider": "groq", "groq_configured": bool(settings.GROQ_API_KEY.strip()),
+            "processing": "local", "database": "sqlite"}
 
 
 @app.exception_handler(Exception)

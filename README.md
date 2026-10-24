@@ -1,102 +1,126 @@
-# Billsner: AI-Based Expense Bill Analyzer
+# Billsner — native Windows + Groq Cloud
 
-Production-oriented full-stack platform that uploads bills/invoices, runs OCR + LLM extraction, classifies expenses, detects semantic duplicates, and supports natural-language search with dashboards and exports.
+Upload receipt images or PDFs, extract expense data through Groq Cloud, review
+expenses, detect similar bills, search, and export CSV/XLSX/PDF reports.
 
-## Stack
+The app runs directly on Windows with Python and Node.js. SQLite stores accounts,
+expenses, and the processing queue. The API starts its own background worker.
+There is no Docker, database server, Redis, Celery service, or local LLM to start.
 
-| Layer | Technology |
-|-------|------------|
-| Frontend | React 18, Vite, TypeScript, Recharts, react-dropzone |
-| Backend | FastAPI, Pydantic v2, SQLAlchemy 2 async |
-| Database | MariaDB |
-| Migrations | Alembic |
-| AI | LangChain, Ollama, Tesseract OCR, ChromaDB, sentence-transformers |
-| Jobs | Celery + Redis |
-| Deploy | Docker Compose |
+## Start the app
 
-## Quick start
+From this project folder, run this in PowerShell:
 
-```bash
-# Copy environment
-cp backend/.env.example backend/.env
-
-docker compose up --build
+```powershell
+powershell -ExecutionPolicy Bypass -File .\start-backend.ps1
 ```
 
-To start only the database service:
+On the first run it creates the Python environment and installs dependencies if
+needed. If `backend/.env` does not exist, it creates one with a generated secret.
+Add your Groq API key to `GROQ_API_KEY` in that file, then restart the backend.
+Existing local settings and API keys are preserved by the start script.
 
-```bash
-docker compose up -d mariadb
+In a second PowerShell window:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\start-frontend.ps1
 ```
 
-To start the database and Redis without the full stack:
+- App: http://localhost:5173
+- API docs: http://localhost:8000/docs
+- Health: http://localhost:8000/health
 
-```bash
-docker compose up -d mariadb redis
+Keep both windows open. Stop each with Ctrl+C. To reinstall backend dependencies
+when updating this checkout, add `-InstallDependencies` to the backend script.
+
+## Requirements
+
+- Python 3.12 or 3.13 and Node.js/npm.
+- Internet access and a Groq Cloud API key: https://console.groq.com/keys
+- Tesseract OCR installed on Windows for images.
+- Poppler installed on Windows for image-based PDFs.
+
+`TESSERACT_CMD` and `POPPLER_PATH` in `backend/.env` point to your native OCR
+installations. These tools perform OCR; all language-model work runs on Groq.
+No model weights are downloaded by the application.
+
+The default model is `openai/gpt-oss-20b`, hosted by Groq. Override `GROQ_MODEL`
+with another model available to your account. Model availability changes; consult
+https://console.groq.com/docs/models and https://console.groq.com/docs/deprecations.
+
+## Configuration
+
+```dotenv
+DATABASE_URL=sqlite+aiosqlite:///./data/billanalyser.db
+LLM_PROVIDER=groq
+GROQ_API_KEY=your-key-here
+GROQ_MODEL=openai/gpt-oss-20b
+SEARCH_INDEX_PATH=./data/search.db
+UPLOAD_DIR=./uploads
 ```
 
-- Frontend: http://localhost:3000  
-- API docs: http://localhost:8000/docs  
-- Health: http://localhost:8000/health  
+Relative paths resolve against `backend/`, including in processing subprocesses.
+The API key stays in the backend; it is never sent to the frontend.
+Missing/invalid keys, rate limits, and connectivity failures are reported on the
+failed upload instead of silently saving empty expenses.
 
-### Local development (without Docker)
+## Storage and processing
 
-**Backend**
+- `backend/data/billanalyser.db`: accounts, bills, OCR results, expenses, and queue.
+- `backend/data/search.db`: rebuildable text similarity index.
+- `backend/uploads/`: uploaded bill files.
 
-```bash
+This version uses a new SQLite database. Existing MariaDB data and old Chroma
+files are not automatically imported or overwritten. Register a new account if
+you have not used the SQLite version before. Keep database files and uploads when
+moving or backing up the app; stop the backend before copying them.
+
+Run **one API process** (`--workers 1`); it supervises one processing job at a time.
+Pending bills persist across restarts. Interrupted processing is requeued at
+startup. Each job has an enforceable process timeout controlled by
+`BILL_PROCESSING_TIMEOUT_SECONDS`. No separate worker command is needed.
+
+Groq receives the extracted receipt text for structured extraction and
+classification. OCR runs locally. Similarity search uses a lightweight lexical
+cosine index, so identical/near-identical receipt text matches well; it does not
+provide the synonym understanding of neural semantic embeddings. Natural-language
+category, vendor, and date filters still run against the expense database.
+
+Bills with missing, zero, or negative totals fail without creating expenses.
+The dashboard polls queued/processing bills and displays failure reasons.
+Deleting a bill clears duplicate references, OCR, expenses, index entries, and the
+uploaded file. Bills currently processing cannot be deleted.
+
+## Manual startup
+
+```powershell
 cd backend
-python -m venv .venv
-.venv\Scripts\activate   # Windows
-pip install -r requirements.txt
-# Start MariaDB + Redis locally, update .env
-uvicorn app.main:app --reload
-celery -A app.tasks.celery_app:celery_app worker --loglevel=info --pool=solo --concurrency=1
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
 ```
 
-**Frontend**
+In another terminal:
 
-```bash
+```powershell
 cd frontend
 npm install
 npm run dev
 ```
 
-**Backend tests**
+## Tests
 
-```bash
+```powershell
 cd backend
-pip install -r requirements.txt
-pytest
+.\.venv\Scripts\python.exe -m pytest -q
 ```
 
-## Project structure
+Tests isolate storage and mock Groq requests; they do not require an API key or
+send real receipt data to a provider.
 
-```
-billanalyser/
-├── backend/app/
-│   ├── api/v1/          # REST routers
-│   ├── ai/              # OCR, LLM, vectors
-│   ├── models/          # SQLAlchemy ORM
-│   ├── schemas/         # Pydantic DTOs
-│   ├── services/        # Business logic
-│   ├── tasks/           # Celery
-│   └── utils/           # Auth, file validation
-├── frontend/src/
-│   ├── api/             # Axios client
-│   ├── components/      # Upload, UI
-│   └── pages/           # Dashboard, expenses, auth
-├── docs/ARCHITECTURE.md # Full system design
-└── docker-compose.yml
+```powershell
+cd frontend
+npx tsc --noEmit
+npm run build
 ```
 
-## API overview
-
-| Group | Endpoints |
-|-------|-----------|
-| Auth | `POST /api/v1/auth/register`, `/login`, `/refresh`, `GET /me` |
-| Bills | `POST /upload`, `GET /{id}`, `DELETE /{id}` |
-| Expenses | `GET /`, `POST /search`, `GET /summary`, `PATCH /{id}` |
-| AI | `POST /ocr/{bill_id}`, `/classify`, `GET /duplicates/{bill_id}` |
-| Reports | `GET /export?format=csv\|xlsx\|pdf&category={category}&vendor={vendor}&date_from={YYYY-MM-DD}&date_to={YYYY-MM-DD}` |
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for ER diagram, pipelines, and deployment guidance.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the runtime design.

@@ -1,11 +1,10 @@
-import json
+import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.classifier import classify_expense
-from app.ai.llm_extractor import extract_structured_data
 from app.ai.ocr_pipeline import extract_text_from_file
 from app.ai.vector_store import build_document_text, find_duplicates
 from app.api.deps import get_current_user
@@ -36,7 +35,7 @@ async def run_ocr(
     bill = result.scalar_one_or_none()
     if not bill:
         raise HTTPException(status_code=404, detail="Bill not found")
-    ocr_data = extract_text_from_file(bill.stored_path)
+    ocr_data = await asyncio.to_thread(extract_text_from_file, bill.stored_path)
     return OCRResponse(
         bill_id=bill.id,
         raw_text=ocr_data.raw_text,
@@ -47,7 +46,7 @@ async def run_ocr(
 
 @router.post("/classify", response_model=ClassificationResponse)
 async def classify(body: ClassificationRequest):
-    cat, secondary, conf, method = classify_expense(body.text, body.vendor_name)
+    cat, secondary, conf, method = await asyncio.to_thread(classify_expense, body.text, body.vendor_name)
     return ClassificationResponse(
         category=cat,
         secondary_categories=secondary,
@@ -75,7 +74,7 @@ async def detect_duplicates(
     ocr = ocr_result.scalar_one_or_none()
     text = ocr.raw_text if ocr else ""
     doc = build_document_text(text, None, None, None, None)
-    matches_raw = find_duplicates(doc, current_user.id, bill_id)
+    matches_raw = await asyncio.to_thread(find_duplicates, doc, current_user.id, bill_id)
 
     matches = [
         DuplicateMatch(

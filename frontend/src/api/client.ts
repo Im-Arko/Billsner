@@ -104,5 +104,5 @@ export interface Summary {
   by_vendor: Record<string, string>;
   monthly_trend: { year: number; month: number; total: number }[];
   duplicate_count: number;
-  recent_bills: { id: number; filename: string; status: string; created_at: string }[];
+  recent_bills: { id: number; filename: string; status: string; created_at: string; error_message?: string | null }[];
 }

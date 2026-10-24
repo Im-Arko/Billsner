@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from kombu.exceptions import OperationalError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,7 +8,7 @@ from app.database import get_db
 from app.models.bill import Bill, BillStatus
 from app.models.user import User
 from app.schemas.bill import BillResponse, BillUploadResponse
-from app.tasks.celery_app import process_bill_task
+from app.services.bill_service import delete_bill as delete_bill_record
 from app.utils.file_validation import (
     build_storage_path,
     sanitize_filename,
@@ -29,6 +28,8 @@ async def upload_bills(
 ):
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
+    if not settings.GROQ_API_KEY.strip():
+        raise HTTPException(status_code=503, detail="Set GROQ_API_KEY in backend/.env before uploading bills.")
     created: list[Bill] = []
     max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
@@ -38,7 +39,7 @@ async def upload_bills(
         await upload.seek(0)
         await validate_file_content(header, ext)
 
-        content = await upload.read()
+        content = await upload.read(max_bytes + 1)
         if len(content) > max_bytes:
             raise HTTPException(
                 status_code=400,
@@ -62,18 +63,7 @@ async def upload_bills(
 
     await db.commit()
 
-    try:
-        for bill in created:
-            process_bill_task.apply_async(args=(bill.id,), retry=True)
-    except OperationalError as exc:
-        for bill in created:
-            bill.status = BillStatus.FAILED
-            bill.error_message = f"Could not queue bill for processing: {exc}"
-        await db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Bill uploaded, but Redis/Celery is unavailable. Start Redis and retry.",
-        ) from exc
+    # Pending rows are the durable queue; the API's local worker picks them up.
 
     return BillUploadResponse(
         bills=[BillResponse.model_validate(b) for b in created],
@@ -102,10 +92,4 @@ async def delete_bill(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(Bill).where(Bill.id == bill_id, Bill.user_id == current_user.id)
-    )
-    bill = result.scalar_one_or_none()
-    if not bill:
-        raise HTTPException(status_code=404, detail="Bill not found")
-    await db.delete(bill)
+    await delete_bill_record(db, bill_id, current_user.id)
